@@ -4,10 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"reflect"
-	"unsafe"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 // Custom error
@@ -17,7 +16,7 @@ type followXAmzBucketRegionError struct {
 }
 
 func (e followXAmzBucketRegionError) Error() string {
-	return fmt.Sprintf("This bucket is located in %s.", e.NewRegion)
+	return fmt.Sprintf("The bucket is located in %s.", e.NewRegion)
 }
 
 func (m followXAmzBucketRegionError) RetryableError() bool {
@@ -48,26 +47,54 @@ func (t followXAmzBucketRegion) RoundTrip(r *http.Request) (*http.Response, erro
 	return resp, err
 }
 
-// Helper method
+// Helper function
 
-func (c *Client) followXAmzBucketRegion(err error) bool {
+func setRegionFn(region *string) func(o *s3.Options) {
+	return func(o *s3.Options) {
+		if region != nil {
+			o.Region = *region
+		}
+	}
+}
+
+// Helper methods
+
+func (c *Client) getBucketRegion(bucket *string) *string {
+	if c.cache != nil {
+		region, ok := c.cache.Get(*bucket)
+		if ok {
+			return &region
+		}
+	}
+	return c.lastRegion
+}
+
+func (c *Client) followXAmzBucketRegion(bucket *string, region *string, err error) *string {
+	if err == nil {
+		c.lastRegion = region
+		if c.cache != nil {
+			c.cache.Add(*bucket, *region)
+		}
+		return nil
+	}
+
 	var e *followXAmzBucketRegionError
 	if errors.As(err, &e) {
-		field := reflect.ValueOf(c.client).Elem().FieldByName("options")
-		s := GetUnexportedField(field).(s3.Options)
-		// fmt.Printf("Updating S3 Client Region from %s to %s.\n\n", s.Region, e.NewRegion)
-		s.Region = e.NewRegion
-		SetUnexportedField(field, s)
-		return true
+		c.lastRegion = &e.NewRegion
+		if c.cache != nil {
+			c.cache.Add(*bucket, e.NewRegion)
+		}
+		return &e.NewRegion
+	} else {
+		var notFoundError *types.NotFound
+		if !errors.As(err, &notFoundError) {
+			// There was an error but the bucket does indeed exist
+			c.lastRegion = region
+			if c.cache != nil {
+				c.cache.Add(*bucket, *region)
+			}
+		}
 	}
-	return false
-}
 
-// https://stackoverflow.com/a/60598827/2730380
-func GetUnexportedField(field reflect.Value) interface{} {
-	return reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface()
-}
-
-func SetUnexportedField(field reflect.Value, value interface{}) {
-	reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Set(reflect.ValueOf(value))
+	return nil
 }

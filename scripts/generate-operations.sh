@@ -16,21 +16,31 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
-
 EOS
 
 
 find "$1" -type f -name 'api_op_*' -maxdepth 1 | sort | while read path
 do
   op=$(basename "$path" .go | cut -d '_' -f 3)
-  cat <<EOS
+  if [[ "$op" == "ListBuckets" || "$op" == "ListDirectoryBuckets" || "$op" == "WriteGetObjectResponse" ]]; then
+    cat <<EOS
+
 func (c *Client) ${op}(ctx context.Context, params *s3.${op}Input, optFns ...func(*s3.Options)) (*s3.${op}Output, error) {
-	result, err := c.client.${op}(ctx, params, optFns...)
-	if c.followXAmzBucketRegion(err) {
-		result, err = c.client.${op}(ctx, params, optFns...)
+	return c.client.${op}(ctx, params, optFns...)
+}
+EOS
+  else
+    cat <<EOS
+
+func (c *Client) ${op}(ctx context.Context, params *s3.${op}Input, optFns ...func(*s3.Options)) (*s3.${op}Output, error) {
+	region := c.getBucketRegion(params.Bucket)
+	result, err := c.client.${op}(ctx, params, append(optFns, setRegionFn(region))...)
+	newRegion := c.followXAmzBucketRegion(params.Bucket, region, err)
+	if newRegion != nil {
+		result, err = c.client.${op}(ctx, params, append(optFns, setRegionFn(newRegion))...)
 	}
 	return result, err
 }
-
 EOS
+  fi
 done
