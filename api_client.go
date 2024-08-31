@@ -94,5 +94,8 @@ func (c *Client) Options() s3.Options {
 }
 
 func (c *Client) GetBucketRegion(bucket string) (region string, ok bool) {
+	if c.cache == nil {
+		return "", false
+	}
 	return c.cache.Get(bucket)
 }

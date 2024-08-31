@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 )
 
 // Custom error
@@ -86,6 +88,22 @@ func (c *Client) followXAmzBucketRegion(bucket *string, region *string, err erro
 		}
 		return &e.NewRegion
 	} else {
+		var ae smithy.APIError
+		if errors.As(err, &ae) && ae.ErrorCode() == "AuthorizationHeaderMalformed" {
+			// This error can be returned when using S3 Accelerate since it doesn't use a regionalized endpoint
+			// Example error message:
+			// The authorization header is malformed; the region 'us-west-1' is wrong; expecting 'us-east-1'
+			message := ae.ErrorMessage()
+			if strings.HasPrefix(message, fmt.Sprintf("The authorization header is malformed; the region '%s' is wrong; expecting '", *region)) {
+				correctRegion := message[strings.LastIndex(message, " ")+2 : len(message)-1]
+				c.lastRegion = &correctRegion
+				if c.cache != nil {
+					c.cache.Add(*bucket, correctRegion)
+				}
+				return &correctRegion
+			}
+		}
+
 		var notFoundError *types.NotFound
 		if !errors.As(err, &notFoundError) {
 			// There was an error but the bucket does indeed exist
