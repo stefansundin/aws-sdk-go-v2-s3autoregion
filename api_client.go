@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awsHttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	lru "github.com/hashicorp/golang-lru/v2"
 )
@@ -19,9 +19,15 @@ type Client struct {
 type ExtendedOptions struct {
 	// The size of the LRU cache that remembers what region buckets reside in
 	CacheSize int
+
+	// The wrapper client needs to override the HTTPClient in order to function
+	// If you need to modify the transport in any way, use this function to do so
+	TransportOptionsFn func(*http.Transport)
 }
 
 func New(options s3.Options, extendedOptions *ExtendedOptions, optFns ...func(*s3.Options)) *Client {
+	httpClientBuilder := awshttp.NewBuildableClient()
+
 	var cache *lru.Cache[string, string]
 	if extendedOptions != nil {
 		if extendedOptions.CacheSize > 0 {
@@ -31,14 +37,19 @@ func New(options s3.Options, extendedOptions *ExtendedOptions, optFns ...func(*s
 				panic(fmt.Errorf("error creating LRU cache: %w", err))
 			}
 		}
+		if extendedOptions.TransportOptionsFn != nil {
+			httpClientBuilder = httpClientBuilder.WithTransportOptions(extendedOptions.TransportOptionsFn)
+		}
 	}
+
 	options.HTTPClient = &http.Client{
 		Transport: followXAmzBucketRegion{
-			tr: awsHttp.NewBuildableClient().GetTransport(),
+			tr: httpClientBuilder.GetTransport(),
 		},
 	}
 	client := s3.New(options, optFns...)
 	effectiveOptions := client.Options()
+
 	return &Client{
 		client:     client,
 		cache:      cache,
@@ -47,6 +58,8 @@ func New(options s3.Options, extendedOptions *ExtendedOptions, optFns ...func(*s
 }
 
 func NewFromConfig(cfg aws.Config, extendedOptions *ExtendedOptions, optFns ...func(*s3.Options)) *Client {
+	httpClientBuilder := awshttp.NewBuildableClient()
+
 	var cache *lru.Cache[string, string]
 	if extendedOptions != nil {
 		if extendedOptions.CacheSize > 0 {
@@ -56,14 +69,19 @@ func NewFromConfig(cfg aws.Config, extendedOptions *ExtendedOptions, optFns ...f
 				panic(fmt.Errorf("error creating LRU cache: %w", err))
 			}
 		}
+		if extendedOptions.TransportOptionsFn != nil {
+			httpClientBuilder = httpClientBuilder.WithTransportOptions(extendedOptions.TransportOptionsFn)
+		}
 	}
+
 	cfg.HTTPClient = &http.Client{
 		Transport: followXAmzBucketRegion{
-			tr: awsHttp.NewBuildableClient().GetTransport(),
+			tr: httpClientBuilder.GetTransport(),
 		},
 	}
 	client := s3.NewFromConfig(cfg, optFns...)
 	effectiveOptions := client.Options()
+
 	return &Client{
 		client:     client,
 		cache:      cache,
