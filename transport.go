@@ -71,21 +71,22 @@ func (c *Client) getBucketRegion(bucket *string) *string {
 	return c.lastRegion
 }
 
+func (c *Client) setBucketRegion(bucket *string, region *string) {
+	c.lastRegion = region
+	if c.cache != nil {
+		c.cache.Add(*bucket, *region)
+	}
+}
+
 func (c *Client) followXAmzBucketRegion(bucket *string, region *string, err error) *string {
 	if err == nil {
-		c.lastRegion = region
-		if c.cache != nil {
-			c.cache.Add(*bucket, *region)
-		}
+		c.setBucketRegion(bucket, region)
 		return nil
 	}
 
 	var e *followXAmzBucketRegionError
 	if errors.As(err, &e) {
-		c.lastRegion = &e.NewRegion
-		if c.cache != nil {
-			c.cache.Add(*bucket, e.NewRegion)
-		}
+		c.setBucketRegion(bucket, &e.NewRegion)
 		return &e.NewRegion
 	} else {
 		var ae smithy.APIError
@@ -96,10 +97,7 @@ func (c *Client) followXAmzBucketRegion(bucket *string, region *string, err erro
 			message := ae.ErrorMessage()
 			if strings.HasPrefix(message, fmt.Sprintf("The authorization header is malformed; the region '%s' is wrong; expecting '", *region)) {
 				correctRegion := message[strings.LastIndex(message, " ")+2 : len(message)-1]
-				c.lastRegion = &correctRegion
-				if c.cache != nil {
-					c.cache.Add(*bucket, correctRegion)
-				}
+				c.setBucketRegion(bucket, &correctRegion)
 				return &correctRegion
 			}
 		}
@@ -107,10 +105,7 @@ func (c *Client) followXAmzBucketRegion(bucket *string, region *string, err erro
 		var notFoundError *types.NotFound
 		if !errors.As(err, &notFoundError) {
 			// There was an error but the bucket does indeed exist
-			c.lastRegion = region
-			if c.cache != nil {
-				c.cache.Add(*bucket, *region)
-			}
+			c.setBucketRegion(bucket, region)
 		}
 	}
 
