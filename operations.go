@@ -317,11 +317,9 @@ func (c *Client) GetBucketLifecycleConfiguration(ctx context.Context, params *s3
 }
 
 func (c *Client) GetBucketLocation(ctx context.Context, params *s3.GetBucketLocationInput, optFns ...func(*s3.Options)) (*s3.GetBucketLocationOutput, error) {
-	region := c.getBucketRegion(params.Bucket)
-	result, err := c.client.GetBucketLocation(ctx, params, append(optFns, setRegionFn(region))...)
-	newRegion := c.followXAmzBucketRegion(params.Bucket, region, err)
-	if newRegion != nil {
-		result, err = c.client.GetBucketLocation(ctx, params, append(optFns, setRegionFn(newRegion))...)
+	result, err := c.client.GetBucketLocation(ctx, params, optFns...)
+	if err == nil {
+		c.setBucketRegion(params.Bucket, (*string)(&result.LocationConstraint))
 	}
 	return result, err
 }

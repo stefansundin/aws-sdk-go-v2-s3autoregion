@@ -29,6 +29,17 @@ func (c *Client) ${op}(ctx context.Context, params *s3.${op}Input, optFns ...fun
 	return c.client.${op}(ctx, params, optFns...)
 }
 EOS
+  elif [[ "$op" == "GetBucketLocation" ]]; then
+    cat <<EOS
+
+func (c *Client) ${op}(ctx context.Context, params *s3.${op}Input, optFns ...func(*s3.Options)) (*s3.${op}Output, error) {
+	result, err := c.client.${op}(ctx, params, optFns...)
+	if err == nil {
+		c.setBucketRegion(params.Bucket, (*string)(&result.LocationConstraint))
+	}
+	return result, err
+}
+EOS
   else
     cat <<EOS
 
