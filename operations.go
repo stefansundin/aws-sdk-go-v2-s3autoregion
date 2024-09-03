@@ -37,11 +37,14 @@ func (c *Client) CopyObject(ctx context.Context, params *s3.CopyObjectInput, opt
 }
 
 func (c *Client) CreateBucket(ctx context.Context, params *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
-	region := c.getBucketRegion(params.Bucket)
-	result, err := c.client.CreateBucket(ctx, params, append(optFns, setRegionFn(region))...)
-	newRegion := c.followXAmzBucketRegion(params.Bucket, region, err)
-	if newRegion != nil {
-		result, err = c.client.CreateBucket(ctx, params, append(optFns, setRegionFn(newRegion))...)
+	result, err := c.client.CreateBucket(ctx, params, optFns...)
+	if err == nil {
+		if params.CreateBucketConfiguration == nil {
+			v := "us-east-1"
+			c.setBucketRegion(params.Bucket, &v)
+		} else {
+			c.setBucketRegion(params.Bucket, (*string)(&params.CreateBucketConfiguration.LocationConstraint))
+		}
 	}
 	return result, err
 }
