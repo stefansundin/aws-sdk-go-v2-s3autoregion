@@ -61,7 +61,50 @@ func setRegionFn(region *string) func(o *s3.Options) {
 
 // Helper methods
 
+func isNumeric(ch rune) bool {
+	return ch >= '0' && ch <= '9'
+}
+
+func expandRegionShortName(s string) (string, bool) {
+	// This attempts to convert a region "short" name (e.g. usw2) to a region (e.g. us-west-2), without relying on a hard-coded list
+	// We just copy the first two characters (e.g. us), add a dash, decode the cardinal-ish directions (e.g. w to west), add another dash and the remaining numbers
+	// This just aims to support the "normal" aws partition. There is a check for GovCloud, so it probably works there too (but I can't test it). I have no idea about the other partitions!
+	// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html
+	region := s[:2] + "-"
+	for i, c := range s[2:] {
+		if isNumeric(c) {
+			region += "-" + s[2+i:]
+			break
+		} else if c == 'g' {
+			region += "gov-"
+		} else if c == 'n' {
+			region += "north"
+		} else if c == 's' {
+			region += "south"
+		} else if c == 'e' {
+			region += "east"
+		} else if c == 'w' {
+			region += "west"
+		} else if c == 'c' {
+			region += "central"
+		} else {
+			return "", false
+		}
+	}
+	return region, true
+}
+
 func (c *Client) getBucketRegion(bucket *string) *string {
+	// Check for directory bucket suffix
+	if prefix, ok := strings.CutSuffix(*bucket, "--x-s3"); ok {
+		i := strings.LastIndex(prefix, "--") + 2
+		j := strings.LastIndex(prefix, "-")
+		regionShortName := prefix[i:j]
+		if region, ok := expandRegionShortName(regionShortName); ok {
+			return &region
+		}
+	}
+
 	if c.cache != nil {
 		region, ok := c.cache.Get(*bucket)
 		if ok {
@@ -81,6 +124,12 @@ func (c *Client) setBucketRegion(bucket *string, region *string) {
 	}
 
 	c.lastRegion = region
+
+	// No need to cache directory buckets
+	if strings.HasSuffix(*bucket, "--x-s3") {
+		return
+	}
+
 	if c.cache != nil {
 		c.cache.Add(*bucket, *region)
 	}
