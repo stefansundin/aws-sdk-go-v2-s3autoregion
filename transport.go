@@ -72,6 +72,14 @@ func (c *Client) getBucketRegion(bucket *string) *string {
 }
 
 func (c *Client) setBucketRegion(bucket *string, region *string) {
+	if *region == "" {
+		v := "us-east-1"
+		region = &v
+	} else if *region == "EU" {
+		v := "eu-west-1"
+		region = &v
+	}
+
 	c.lastRegion = region
 	if c.cache != nil {
 		c.cache.Add(*bucket, *region)
