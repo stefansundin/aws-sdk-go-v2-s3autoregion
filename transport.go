@@ -51,11 +51,9 @@ func (t followXAmzBucketRegion) RoundTrip(r *http.Request) (*http.Response, erro
 
 // Helper function
 
-func setRegionFn(region *string) func(o *s3.Options) {
+func setRegionFn(region string) func(o *s3.Options) {
 	return func(o *s3.Options) {
-		if region != nil {
-			o.Region = *region
-		}
+		o.Region = region
 	}
 }
 
@@ -94,33 +92,31 @@ func expandRegionShortName(s string) (string, bool) {
 	return region, true
 }
 
-func (c *Client) getBucketRegion(bucket *string) *string {
+func (c *Client) getBucketRegion(bucket *string) string {
 	// Check for directory bucket suffix
 	if prefix, ok := strings.CutSuffix(*bucket, "--x-s3"); ok {
 		i := strings.LastIndex(prefix, "--") + 2
 		j := strings.LastIndex(prefix, "-")
 		regionShortName := prefix[i:j]
 		if region, ok := expandRegionShortName(regionShortName); ok {
-			return &region
+			return region
 		}
 	}
 
 	if c.cache != nil {
 		region, ok := c.cache.Get(*bucket)
 		if ok {
-			return &region
+			return region
 		}
 	}
 	return c.lastRegion
 }
 
-func (c *Client) setBucketRegion(bucket *string, region *string) {
-	if *region == "" {
-		v := "us-east-1"
-		region = &v
-	} else if *region == "EU" {
-		v := "eu-west-1"
-		region = &v
+func (c *Client) setBucketRegion(bucket *string, region string) {
+	if region == "" {
+		region = "us-east-1"
+	} else if region == "EU" {
+		region = "eu-west-1"
 	}
 
 	c.lastRegion = region
@@ -131,20 +127,20 @@ func (c *Client) setBucketRegion(bucket *string, region *string) {
 	}
 
 	if c.cache != nil {
-		c.cache.Add(*bucket, *region)
+		c.cache.Add(*bucket, region)
 	}
 }
 
-func (c *Client) followXAmzBucketRegion(bucket *string, region *string, err error) *string {
+func (c *Client) followXAmzBucketRegion(bucket *string, region string, err error) (string, bool) {
 	if err == nil {
 		c.setBucketRegion(bucket, region)
-		return nil
+		return "", false
 	}
 
 	var e *followXAmzBucketRegionError
 	if errors.As(err, &e) {
-		c.setBucketRegion(bucket, &e.NewRegion)
-		return &e.NewRegion
+		c.setBucketRegion(bucket, e.NewRegion)
+		return e.NewRegion, true
 	} else {
 		var ae smithy.APIError
 		if errors.As(err, &ae) && ae.ErrorCode() == "AuthorizationHeaderMalformed" {
@@ -152,10 +148,10 @@ func (c *Client) followXAmzBucketRegion(bucket *string, region *string, err erro
 			// Example error message:
 			// The authorization header is malformed; the region 'us-west-1' is wrong; expecting 'us-east-1'
 			message := ae.ErrorMessage()
-			if strings.HasPrefix(message, fmt.Sprintf("The authorization header is malformed; the region '%s' is wrong; expecting '", *region)) {
+			if strings.HasPrefix(message, fmt.Sprintf("The authorization header is malformed; the region '%s' is wrong; expecting '", region)) {
 				correctRegion := message[strings.LastIndex(message, " ")+2 : len(message)-1]
-				c.setBucketRegion(bucket, &correctRegion)
-				return &correctRegion
+				c.setBucketRegion(bucket, correctRegion)
+				return correctRegion, true
 			}
 		}
 
@@ -166,5 +162,5 @@ func (c *Client) followXAmzBucketRegion(bucket *string, region *string, err erro
 		}
 	}
 
-	return nil
+	return "", false
 }

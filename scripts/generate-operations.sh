@@ -36,13 +36,20 @@ func (c *Client) ${op}(ctx context.Context, params *s3.${op}Input, optFns ...fun
 	result, err := c.client.${op}(ctx, params, optFns...)
 	if err == nil {
 		if params.${op}Configuration == nil {
-			v := "us-east-1"
-			c.setBucketRegion(params.Bucket, &v)
+			c.setBucketRegion(params.Bucket, "us-east-1")
 		} else {
-			c.setBucketRegion(params.Bucket, (*string)(&params.${op}Configuration.LocationConstraint))
+			c.setBucketRegion(params.Bucket, string(params.${op}Configuration.LocationConstraint))
 		}
 	}
 	return result, err
+}
+EOS
+  elif [[ "$op" == "CreateSession" ]]; then
+    cat <<EOS
+
+func (c *Client) ${op}(ctx context.Context, params *s3.${op}Input, optFns ...func(*s3.Options)) (*s3.${op}Output, error) {
+	region := c.getBucketRegion(params.Bucket)
+	return c.client.${op}(ctx, params, append(optFns, setRegionFn(region))...)
 }
 EOS
   elif [[ "$op" == "GetBucketLocation" ]]; then
@@ -51,7 +58,7 @@ EOS
 func (c *Client) ${op}(ctx context.Context, params *s3.${op}Input, optFns ...func(*s3.Options)) (*s3.${op}Output, error) {
 	result, err := c.client.${op}(ctx, params, optFns...)
 	if err == nil {
-		c.setBucketRegion(params.Bucket, (*string)(&result.LocationConstraint))
+		c.setBucketRegion(params.Bucket, string(result.LocationConstraint))
 	}
 	return result, err
 }
@@ -62,8 +69,7 @@ EOS
 func (c *Client) ${op}(ctx context.Context, params *s3.${op}Input, optFns ...func(*s3.Options)) (*s3.${op}Output, error) {
 	region := c.getBucketRegion(params.Bucket)
 	result, err := c.client.${op}(ctx, params, append(optFns, setRegionFn(region))...)
-	newRegion := c.followXAmzBucketRegion(params.Bucket, region, err)
-	if newRegion != nil {
+	if newRegion, ok := c.followXAmzBucketRegion(params.Bucket, region, err); ok {
 		result, err = c.client.${op}(ctx, params, append(optFns, setRegionFn(newRegion))...)
 	}
 	return result, err

@@ -13,7 +13,7 @@ import (
 type Client struct {
 	client     *s3.Client
 	cache      *lru.Cache[string, string]
-	lastRegion *string
+	lastRegion string
 }
 
 type ExtendedOptions struct {
@@ -53,7 +53,7 @@ func New(options s3.Options, extendedOptions *ExtendedOptions, optFns ...func(*s
 	return &Client{
 		client:     client,
 		cache:      cache,
-		lastRegion: &effectiveOptions.Region,
+		lastRegion: effectiveOptions.Region,
 	}
 }
 
@@ -85,7 +85,7 @@ func NewFromConfig(cfg aws.Config, extendedOptions *ExtendedOptions, optFns ...f
 	return &Client{
 		client:     client,
 		cache:      cache,
-		lastRegion: &effectiveOptions.Region,
+		lastRegion: effectiveOptions.Region,
 	}
 }
 
