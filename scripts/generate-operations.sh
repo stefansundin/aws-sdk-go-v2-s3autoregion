@@ -3,7 +3,7 @@
 if [ $# -eq 0 ]; then
   echo "Please provide a path to the S3 module and pipe the output to a file. Example:"
   echo
-  echo "$0 ~/go/pkg/mod/github.com/aws/aws-sdk-go-v2/service/s3@v1.61.0 > operations.go"
+  echo "$0 ~/go/pkg/mod/github.com/aws/aws-sdk-go-v2/service/s3@v1.61.2 > operations.go"
   echo
   exit 1
 fi
