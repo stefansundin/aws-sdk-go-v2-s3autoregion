@@ -1,5 +1,7 @@
 A wrapper for the aws-sdk-go-v2 S3 client that automatically follows the `x-amz-bucket-region` header so that you don't have to worry about which region the bucket is in.
 
+It also attempts to infer the correct region from S3 Express bucket names, e.g. `bucketname--usw2-az1--x-s3` is in `us-west-2`. It also works with S3 Accelerate.
+
 Last updated for [v1.61.0](https://pkg.go.dev/mod/github.com/aws/aws-sdk-go-v2/service/s3@v1.61.0).
 
 ## Example usage
