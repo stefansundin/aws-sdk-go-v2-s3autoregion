@@ -113,3 +113,17 @@ Bucket region: us-east-1
 
 HeadObject ContentLength: 12352
 ```
+
+## Update to the latest SDK version
+
+Review changelog: https://github.com/aws/aws-sdk-go-v2/blob/main/service/s3/CHANGELOG.md
+
+```shell
+go get -u
+go mod tidy
+
+# Update the version number in the command below:
+./scripts/generate-operations.sh ~/go/pkg/mod/github.com/aws/aws-sdk-go-v2/service/s3@v1.61.2 > operations.go
+```
+
+Review each new operation, and if necessary customize the script.
